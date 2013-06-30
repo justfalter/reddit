@@ -47,7 +47,10 @@ from r2.lib.db import queries
 from r2.lib.db.tdb_cassandra import MultiColumnQuery
 from r2.lib.strings import strings
 from r2.lib.search import (SearchQuery, SubredditSearchQuery, SearchException,
-                           InvalidQuery)
+                           InvalidQuery, AdaptedSearchQuery)
+
+from r2.lib.search_common import (GenericSearchQuery)
+
 from r2.lib.validator import *
 from r2.lib import jsontemplates
 from r2.lib import sup
@@ -733,19 +736,21 @@ class FrontController(RedditController, OAuth2ResourceController):
         if not can_view_link_comments(article):
             abort(403, 'forbidden')
 
-        query = self.related_replace_regex.sub(self.related_replace_with,
-                                               article.title)
-        query = _force_unicode(query)
-        query = query[:1024]
-        query = u"|".join(query.split())
-        query = u"title:'%s'" % query
         rel_range = timedelta(days=3)
         start = int(time_module.mktime((article._date - rel_range).utctimetuple()))
         end = int(time_module.mktime((article._date + rel_range).utctimetuple()))
-        nsfw = u"nsfw:0" if not (article.over_18 or article._nsfw.findall(article.title)) else u""
-        query = u"(and %s timestamp:%s..%s %s)" % (query, start, end, nsfw)
-        q = SearchQuery(query, raw_sort="-text_relevance",
-                        syntax="cloudsearch")
+
+        related_query2 = GenericSearchQuery()
+        related_query2.add_range(u"timestamp", start, end)
+        related_query2.add_equal_any(u"title", article.title)
+
+        if not (article.over_18 or article._nsfw.findall(article.title)):
+            related_query2.add_boolean(u"nsfw", False)
+
+        related_query2.add_relevance_sort(False)
+
+        q = AdaptedSearchQuery(related_query2)
+
         pane = self._search(q, num=num, after=after, reverse=reverse,
                             count=count)[2]
 

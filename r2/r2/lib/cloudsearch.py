@@ -42,6 +42,9 @@ from r2.models import (Account, Link, Subreddit, Thing, All, DefaultSR,
                        MultiReddit, DomainSR, Friends, ModContribSR,
                        FakeSubreddit, NotFound)
 
+from r2.lib.search_common import (LinkFields, 
+                                  SubredditFields, Results)
+
 
 _CHUNK_SIZE = 4000000 # Approx. 4 MB, to stay under the 5MB limit
 _VERSION_OFFSET = 13257906857
@@ -81,250 +84,6 @@ def safe_get(get_fn, ids, return_dict=True, **kw):
 
 class CloudSearchHTTPError(httplib.HTTPException): pass
 class InvalidQuery(Exception): pass
-
-
-Field = collections.namedtuple("Field", "name cloudsearch_type "
-                               "lucene_type function")
-SAME_AS_CLOUDSEARCH = object()
-FIELD_TYPES = (int, str, datetime, SAME_AS_CLOUDSEARCH, "yesno")
-
-def field(name=None, cloudsearch_type=str, lucene_type=SAME_AS_CLOUDSEARCH):
-    if lucene_type is SAME_AS_CLOUDSEARCH:
-        lucene_type = cloudsearch_type
-    if cloudsearch_type not in FIELD_TYPES + (None,):
-        raise ValueError("cloudsearch_type %r not in %r" %
-                         (cloudsearch_type, FIELD_TYPES))
-    if lucene_type not in FIELD_TYPES + (None,):
-        raise ValueError("lucene_type %r not in %r" %
-                         (lucene_type, FIELD_TYPES))
-    if callable(name):
-        # Simple case; decorated as '@field'; act as a decorator instead
-        # of a decorator factory
-        function = name
-        name = None
-    else:
-        function = None
-
-    def field_inner(fn):
-        fn.field = Field(name or fn.func_name, cloudsearch_type,
-                         lucene_type, fn)
-        return fn
-
-    if function:
-        return field_inner(function)
-    else:
-        return field_inner
-
-
-class FieldsMeta(type):
-    def __init__(cls, name, bases, attrs):
-        type.__init__(cls, name, bases, attrs)
-        fields = []
-        for attr in attrs.itervalues():
-            if hasattr(attr, "field"):
-                fields.append(attr.field)
-        cls._fields = tuple(fields)
-
-
-class FieldsBase(object):
-    __metaclass__ = FieldsMeta
-
-    def fields(self):
-        data = {}
-        for field in self._fields:
-            if field.cloudsearch_type is None:
-                continue
-            val = field.function(self)
-            if val is not None:
-                data[field.name] = val
-        return data
-
-    @classmethod
-    def all_fields(cls):
-        return cls._fields
-
-    @classmethod
-    def cloudsearch_fields(cls, type_=None, types=FIELD_TYPES):
-        types = (type_,) if type_ else types
-        return [f for f in cls._fields if f.cloudsearch_type in types]
-
-    @classmethod
-    def lucene_fields(cls, type_=None, types=FIELD_TYPES):
-        types = (type_,) if type_ else types
-        return [f for f in cls._fields if f.lucene_type in types]
-
-    @classmethod
-    def cloudsearch_fieldnames(cls, type_=None, types=FIELD_TYPES):
-        return [f.name for f in cls.cloudsearch_fields(type_=type_,
-                                                       types=types)]
-
-    @classmethod
-    def lucene_fieldnames(cls, type_=None, types=FIELD_TYPES):
-        return [f.name for f in cls.lucene_fields(type_=type_, types=types)]
-
-
-class LinkFields(FieldsBase):
-    def __init__(self, link, author, sr):
-        self.link = link
-        self.author = author
-        self.sr = sr
-
-    @field(cloudsearch_type=int, lucene_type=None)
-    def ups(self):
-        return max(0, self.link._ups)
-
-    @field(cloudsearch_type=int, lucene_type=None)
-    def downs(self):
-        return max(0, self.link._downs)
-
-    @field(cloudsearch_type=int, lucene_type=None)
-    def num_comments(self):
-        return max(0, getattr(self.link, 'num_comments', 0))
-
-    @field
-    def fullname(self):
-        return self.link._fullname
-
-    @field
-    def subreddit(self):
-        return self.sr.name
-
-    @field
-    def reddit(self):
-        return self.sr.name
-
-    @field
-    def title(self):
-        return self.link.title
-
-    @field(cloudsearch_type=int)
-    def sr_id(self):
-        return self.link.sr_id
-
-    @field(cloudsearch_type=int, lucene_type=datetime)
-    def timestamp(self):
-        return int(time.mktime(self.link._date.utctimetuple()))
-
-    @field(cloudsearch_type=int, lucene_type="yesno")
-    def over18(self):
-        nsfw = (self.sr.over_18 or self.link.over_18 or
-                Link._nsfw.findall(self.link.title))
-        return (1 if nsfw else 0)
-
-    @field(cloudsearch_type=None, lucene_type="yesno")
-    def nsfw(self):
-        return NotImplemented
-
-    @field(cloudsearch_type=int, lucene_type="yesno")
-    def is_self(self):
-        return (1 if self.link.is_self else 0)
-
-    @field(name="self", cloudsearch_type=None, lucene_type="yesno")
-    def self_(self):
-        return NotImplemented
-
-    @field
-    def author_fullname(self):
-        return self.author._fullname
-
-    @field(name="author")
-    def author_field(self):
-        return '[deleted]' if self.author._deleted else self.author.name
-
-    @field(cloudsearch_type=int)
-    def type_id(self):
-        return self.link._type_id
-
-    @field
-    def site(self):
-        if self.link.is_self:
-            return g.domain
-        else:
-            url = r2utils.UrlParser(self.link.url)
-            try:
-                return list(url.domain_permutations())
-            except ValueError:
-                return None
-
-    @field
-    def selftext(self):
-        if self.link.is_self and self.link.selftext:
-            return self.link.selftext
-        else:
-            return None
-
-    @field
-    def url(self):
-        if not self.link.is_self:
-            return self.link.url
-        else:
-            return None
-
-    @field
-    def flair_css_class(self):
-        return self.link.flair_css_class
-
-    @field
-    def flair_text(self):
-        return self.link.flair_text
-
-    @field(cloudsearch_type=None, lucene_type=str)
-    def flair(self):
-        return NotImplemented
-
-
-class SubredditFields(FieldsBase):
-    def __init__(self, sr):
-        self.sr = sr
-
-    @field
-    def name(self):
-        return self.sr.name
-
-    @field
-    def title(self):
-        return self.sr.title
-
-    @field(name="type")
-    def type_(self):
-        return self.sr.type
-
-    @field
-    def language(self):
-        return self.sr.lang
-
-    @field
-    def header_title(self):
-        return self.sr.header_title
-
-    @field
-    def description(self):
-        return self.sr.public_description
-
-    @field
-    def sidebar(self):
-        return self.sr.description
-
-    @field(cloudsearch_type=int)
-    def over18(self):
-        return 1 if self.sr.over_18 else 0
-
-    @field
-    def link_type(self):
-        return self.sr.link_type
-
-    @field
-    def activity(self):
-        return self.sr._downs
-
-    @field
-    def subscribers(self):
-        return self.sr._ups
-
-    @field
-    def type_id(self):
-        return self.sr._type_id
-
 
 class CloudSearchUploader(object):
     use_safe_get = False
@@ -923,6 +682,56 @@ class CloudSearchQuery(object):
 
         results = Results(docs, hits, facets)
         return results
+
+class AdaptedCloudSearchQuery(CloudSearchQuery):
+
+    any_replace_regex = re.compile(r'[?\\&|!{}+~^()"\':*-]+')
+    any_replace_with = ' '
+
+    def __init__(self, query_obj):
+        query_list = []
+        sort_list = []
+        for field in query_obj.fields:
+            if field.query_type == "equal":
+                v = field.value
+                if field.any_word == True:
+                    v = self.any_replace_regex.sub(self.any_replace_with, 
+                                                   field.value)
+                    v = u'|'.join(v.split())
+
+                v = v.replace("'", "\\'")
+                query_list.append("{0}:'{1}'".format(field.name, v))
+            elif field.query_type == "boolean":
+                v = 0
+                if field.value == True:
+                    v = 1
+
+                query_list.append(("{0}:{1}".format(field.name, v)))
+            elif field.query_type == "range":
+                query_list.append(("{0}:{1}..{2}".format(field.name, 
+                                                 field.range_start_s(), 
+                                                 field.range_end_s())))
+
+        for s in query_obj.sorts:
+          maybe_minus = ''
+          if s.ascending == False:
+              maybe_minus = '-'
+
+          if s.sort_type == 'generic':
+              sort_list.append("{0}{1}".format(maybe_minus, s.name))
+          elif s.sort_type == 'text_relevance':
+              sort_list.append("{0}text_relevance".format(maybe_minus))
+
+        query = u"(and %s)" % (' '.join(query_list))
+        query = filters._force_unicode(query)
+        raw_sort = None
+        if len(sort_list) > 0:
+            raw_sort = filters._force_unicode(u' '.join(sort_list))
+
+        super(AdaptedCloudSearchQuery, self).__init__(query, 
+                                                      raw_sort=raw_sort,
+                                                      syntax="cloudsearch") 
+
 
 
 class LinkSearchQuery(CloudSearchQuery):
