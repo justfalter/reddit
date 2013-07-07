@@ -370,7 +370,16 @@ class GenericSearchQuery(object):
         return ''.join(result)
 
 class RelatedArticleSearchQuery(GenericSearchQuery):
+    '''Finds related articles based on the title'''
+
     def __init__(self, ts_start, ts_end, title, omit_nsfw=True):
+        '''
+        ts_start: number 
+        ts_end: number
+        title: string
+        omit_nsfw: boolean
+           Set to true if we don't want to include NSFW articles.
+        '''
         super(RelatedArticleSearchQuery, self).__init__()
         self.add_range(u"timestamp", ts_start, ts_end)
         self.add_equal_any(u"title", title)
