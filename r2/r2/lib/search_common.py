@@ -333,7 +333,7 @@ class TextRelevanceSort(GenericSort):
                                                 sort_type="text_relevance")
 
 
-class GenericSearchQuery(object):
+class GenericSearchQueryParams(object):
     def __init__(self):
         self.fields = []
         self.sorts = []
@@ -369,7 +369,7 @@ class GenericSearchQuery(object):
             ]
         return ''.join(result)
 
-class RelatedArticleSearchQuery(GenericSearchQuery):
+class RelatedArticleSearchQueryParams(GenericSearchQueryParams):
     '''Finds related articles based on the title'''
 
     def __init__(self, ts_start, ts_end, title, omit_nsfw=True):
@@ -380,7 +380,7 @@ class RelatedArticleSearchQuery(GenericSearchQuery):
         omit_nsfw: boolean
            Set to true if we don't want to include NSFW articles.
         '''
-        super(RelatedArticleSearchQuery, self).__init__()
+        super(RelatedArticleSearchQueryParams, self).__init__()
         self.add_range(u"timestamp", ts_start, ts_end)
         self.add_equal_any(u"title", title)
 
