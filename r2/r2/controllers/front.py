@@ -740,16 +740,16 @@ class FrontController(RedditController, OAuth2ResourceController):
         start = int(time_module.mktime((article._date - rel_range).utctimetuple()))
         end = int(time_module.mktime((article._date + rel_range).utctimetuple()))
 
-        related_query2 = GenericSearchQuery()
-        related_query2.add_range(u"timestamp", start, end)
-        related_query2.add_equal_any(u"title", article.title)
+        related_query = GenericSearchQuery()
+        related_query.add_range(u"timestamp", start, end)
+        related_query.add_equal_any(u"title", article.title)
 
         if not (article.over_18 or article._nsfw.findall(article.title)):
-            related_query2.add_boolean(u"nsfw", False)
+            related_query.add_boolean(u"nsfw", False)
 
-        related_query2.add_relevance_sort(False)
+        related_query.add_relevance_sort(False)
 
-        q = AdaptedSearchQuery(related_query2)
+        q = AdaptedSearchQuery(related_query)
 
         pane = self._search(q, num=num, after=after, reverse=reverse,
                             count=count)[2]
