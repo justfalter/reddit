@@ -5,6 +5,7 @@ import time
 from r2.models import (Account, Link, Subreddit, Thing, All, DefaultSR,
                        MultiReddit, DomainSR, Friends, ModContribSR,
                        FakeSubreddit, NotFound)
+import r2.lib.utils as r2utils
 
 Field = collections.namedtuple("Field", "name cloudsearch_type "
                                "lucene_type function")
