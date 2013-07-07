@@ -42,7 +42,7 @@ from r2.models import (Account, Link, Subreddit, Thing, All, DefaultSR,
                        MultiReddit, DomainSR, Friends, ModContribSR,
                        FakeSubreddit, NotFound)
 
-from r2.lib.search_common import (LinkFields, 
+from r2.lib.search_common import (LinkFields, SearchParamsBuilderInterface,
                                   SubredditFields, Results)
 
 
@@ -683,6 +683,68 @@ class CloudSearchQuery(object):
         results = Results(docs, hits, facets)
         return results
 
+class CloudSearchQueryParams(object):
+    def __init__(self, query_string, raw_sort=None):
+        self.query_string = query_string
+        self.raw_sort = raw_sort
+        
+class CloudSearchParamsBuilder(SearchParamsBuilderInterface):
+    any_replace_regex = re.compile(r'[?\\&|!{}+~^()"\':*-]+')
+    any_replace_with = ' '
+
+    def __init__(self):
+        self.query_list = []
+        self.sort_list = []
+
+    def build(self):
+        query = u"(and %s)" % (' '.join(self.query_list))
+        query = filters._force_unicode(query)
+        raw_sort = None
+        if len(self.sort_list) > 0:
+            raw_sort = filters._force_unicode(u' '.join(self.sort_list))
+        return(CloudSearchQueryParams(query, raw_sort=raw_sort))
+        
+
+    def add_range(self, name, range_start, range_end):
+        start_s = str(range_start)
+        if range_start == None:
+            start_s = ''
+
+        end_s = str(range_end)
+        if range_end == None:
+            end_s = ''
+
+        self.query_list.append(("{0}:{1}..{2}".format(name, 
+                                         start_s, 
+                                         end_s)))
+
+    def add_equal(self, name, val):
+        v = val.replace("'", "\\'")
+        self.query_list.append("{0}:'{1}'".format(name, v))
+
+    def add_equal_any(self, name, val):
+        v = self.any_replace_regex.sub(self.any_replace_with, 
+                                       val)
+        v = u'|'.join(v.split())
+        self.add_equal(name, v)
+
+    def add_boolean(self, name, val):
+        v = 0
+        if val == True:
+            v = 1
+
+        self.query_list.append(("{0}:{1}".format(name, v)))
+
+    def add_sort(self, name, ascending=True):
+        maybe_minus = ''
+        if ascending == False:
+            maybe_minus = '-'
+        self.sort_list.append("{0}{1}".format(maybe_minus, name))
+
+    def add_relevance_sort(self, ascending = True):
+        self.add_sort("text_relevance", ascending)
+
+
 class AdaptedCloudSearchQuery(CloudSearchQuery):
 
     any_replace_regex = re.compile(r'[?\\&|!{}+~^()"\':*-]+')
@@ -775,6 +837,12 @@ class LinkSearchQuery(CloudSearchQuery):
             queries.append(recent_query)
         return self.create_boolean_query(queries)
 
+    @classmethod
+    def from_query_params(cls, query_params):
+        return cls(query_params.query_string, 
+            raw_sort=query_params.raw_sort, 
+            syntax="cloudsearch")
+        
     @classmethod
     def create_boolean_query(cls, queries):
         '''Return an AND clause combining all queries'''

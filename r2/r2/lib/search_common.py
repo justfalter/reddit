@@ -250,129 +250,31 @@ class SubredditFields(FieldsBase):
     def type_id(self):
         return self.sr._type_id
 
-
-class GenericFieldQuery(object):
-    def __init__(self, query_type, name):
-        self.query_type = query_type
-        self.name = name
-
-class EqualFieldQuery(GenericFieldQuery):
-    def __init__(self, name, val, any_word = False):
-        self.value = val
-        self.any_word = any_word
-        super(EqualFieldQuery, self).__init__("equal", name) 
-
-    def __repr__(self):
-        '''Return a string representation of this query'''
-        result = ["<", self.__class__.__name__, " ", 
-            "name:", repr(self.name), " ",
-            "value:", repr(self.value), ">"
-            ]
-        return ''.join(result)
-
-class BooleanFieldQuery(GenericFieldQuery):
-    def __init__(self, name, val):
-        self.value = (val == True)
-        super(BooleanFieldQuery, self).__init__("boolean", name) 
-
-    def __repr__(self):
-        '''Return a string representation of this query'''
-        result = ["<", self.__class__.__name__, " ", 
-            "name:", repr(self.name), " ",
-            "value:", repr(self.value), ">"
-            ]
-        return ''.join(result)
-
-class RangeFieldQuery(GenericFieldQuery):
-    def __init__(self, name, range_start=None, range_end=None):
-        self.range_start = range_start
-        self.range_end = range_end
-        super(RangeFieldQuery, self).__init__("range", name)
-
-    def range_start_s(self):
-        if self.range_start == None:
-            return ''  
-        return str(self.range_start)
-
-    def range_end_s(self):
-        if self.range_end == None:
-            return ''  
-        return str(self.range_end)
-
-
-    def __repr__(self):
-        '''Return a string representation of this query'''
-        result = ["<", self.__class__.__name__, " ", 
-            "name:", repr(self.name), " ",
-            "range_start:", repr(self.range_start), " ",
-            "range_end:", repr(self.range_end),
-            ">"
-            ]
-        return ''.join(result)
-
-class GenericSort(object):
-    def __init__(self, name, ascending, sort_type="generic"):
-        self.name = name
-        self.sort_type = sort_type
-        self.ascending = (ascending == True)
-
-    def __repr__(self):
-        '''Return a string representation of this query'''
-        result = ["<", self.__class__.__name__, " ", 
-            "name:", repr(self.name), " ",
-            "ascending:", repr(self.ascending), ">"
-            ]
-        return ''.join(result)
-
-
-
-# In cloudsearch, this is 'text_relevance'.. ElasticSearch: '_score'
-class TextRelevanceSort(GenericSort): 
-    def __init__(self, ascending = False): 
-        super(TextRelevanceSort, self).__init__(None, ascending, 
-                                                sort_type="text_relevance")
-
-
-class GenericSearchQueryParams(object):
-    def __init__(self):
-        self.fields = []
-        self.sorts = []
-
-    def add_fieldquery(self, fq):
-        self.fields.append(fq)
-
+class SearchParamsBuilderInterface(object):
+    def build(self):
+        ''' Returns an arbitrary object, specific to the implementation '''
+        raise NotImplementedError
+        
     def add_range(self, name, range_start, range_end):
-        self.add_fieldquery(RangeFieldQuery(name, range_start=range_start,
-                                       range_end=range_end))
+        raise NotImplementedError
+
     def add_equal(self, name, val):
-        self.add_fieldquery(EqualFieldQuery(name, val))
+        raise NotImplementedError
 
     def add_equal_any(self, name, val):
-        self.add_fieldquery(EqualFieldQuery(name, val, any_word = True))
+        raise NotImplementedError
 
     def add_boolean(self, name, val):
-        self.add_fieldquery(BooleanFieldQuery(name, val))
+        raise NotImplementedError
 
     def add_sort(self, name, ascending=True):
-        self.sorts.append(GenericSort(name, ascending))
+        raise NotImplementedError
 
     def add_relevance_sort(self, ascending = True):
-        self.sorts.append(TextRelevanceSort(ascending))
+        raise NotImplementedError
 
-
-    def __repr__(self):
-        '''Return a string representation of this query'''
-        result = ["<", self.__class__.__name__, " ", 
-            "fields:", repr(self.fields), " ",
-            "sorts:", repr(self.sorts),
-            ">"
-            ]
-        return ''.join(result)
-
-class RelatedArticleSearchQueryParams(GenericSearchQueryParams):
-    '''Finds related articles based on the title'''
-
-    def __init__(self, ts_start, ts_end, title, omit_nsfw=True):
+    @classmethod
+    def related_builder(cls, ts_start, ts_end, title, omit_nsfw=True):
         '''
         ts_start: number 
         ts_end: number
@@ -380,14 +282,19 @@ class RelatedArticleSearchQueryParams(GenericSearchQueryParams):
         omit_nsfw: boolean
            Set to true if we don't want to include NSFW articles.
         '''
-        super(RelatedArticleSearchQueryParams, self).__init__()
-        self.add_range(u"timestamp", ts_start, ts_end)
-        self.add_equal_any(u"title", title)
+        builder = cls()
+        builder.add_range(u"timestamp", ts_start, ts_end)
+        builder.add_equal_any(u"title", title)
 
         if omit_nsfw == True:
-            self.add_boolean(u"nsfw", False)
+            builder.add_boolean(u"nsfw", False)
 
-        self.add_relevance_sort(False)
+        builder.add_relevance_sort(False)
+        return builder
+
+    @classmethod
+    def related(cls, ts_start, ts_end, title, omit_nsfw=True):
+        return cls.related_builder(ts_start, ts_end, title, omit_nsfw).build()
 
 class Results(object):
     def __init__(self, docs, hits, facets):
