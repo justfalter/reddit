@@ -49,7 +49,7 @@ from r2.lib.strings import strings
 from r2.lib.search import (SearchQuery, SubredditSearchQuery, SearchException,
                            InvalidQuery, AdaptedSearchQuery)
 
-from r2.lib.search_common import (GenericSearchQuery)
+from r2.lib.search_common import (RelatedArticleSearchQuery)
 
 from r2.lib.validator import *
 from r2.lib import jsontemplates
@@ -740,14 +740,11 @@ class FrontController(RedditController, OAuth2ResourceController):
         start = int(time_module.mktime((article._date - rel_range).utctimetuple()))
         end = int(time_module.mktime((article._date + rel_range).utctimetuple()))
 
-        related_query = GenericSearchQuery()
-        related_query.add_range(u"timestamp", start, end)
-        related_query.add_equal_any(u"title", article.title)
+        omit_nsfw = (article.over_18 or article._nsfw.findall(article.title)) == False
+        related_query = RelatedArticleSearchQuery(start, end, 
+                                                   article.title, 
+                                                   omit_nsfw=omit_nsfw)
 
-        if not (article.over_18 or article._nsfw.findall(article.title)):
-            related_query.add_boolean(u"nsfw", False)
-
-        related_query.add_relevance_sort(False)
 
         q = AdaptedSearchQuery(related_query)
 

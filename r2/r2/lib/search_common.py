@@ -369,6 +369,17 @@ class GenericSearchQuery(object):
             ]
         return ''.join(result)
 
+class RelatedArticleSearchQuery(GenericSearchQuery):
+    def __init__(self, ts_start, ts_end, title, omit_nsfw=True):
+        super(RelatedArticleSearchQuery, self).__init__()
+        self.add_range(u"timestamp", ts_start, ts_end)
+        self.add_equal_any(u"title", title)
+
+        if omit_nsfw == True:
+            self.add_boolean(u"nsfw", False)
+
+        self.add_relevance_sort(False)
+
 class Results(object):
     def __init__(self, docs, hits, facets):
         self.docs = docs
