@@ -28,7 +28,5 @@ SearchException = (cloudsearch.CloudSearchHTTPError,)
 
 SearchParamsBuilder = cloudsearch.CloudSearchParamsBuilder
 SearchQuery = cloudsearch.LinkSearchQuery
-SubredditSearchQuery = cloudsearch.SubredditSearchQuery
-AdaptedSearchQuery = cloudsearch.AdaptedCloudSearchQuery
 
 sorts = cloudsearch.LinkSearchQuery.sorts_menu_mapping

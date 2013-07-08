@@ -46,8 +46,8 @@ from r2.lib.db.operators import desc
 from r2.lib.db import queries
 from r2.lib.db.tdb_cassandra import MultiColumnQuery
 from r2.lib.strings import strings
-from r2.lib.search import (SearchQuery, SubredditSearchQuery, SearchException,
-                           InvalidQuery, AdaptedSearchQuery, 
+from r2.lib.search import (SearchException,
+                           InvalidQuery, 
                            SearchParamsBuilder)
 
 from r2.lib.validator import *
@@ -740,11 +740,9 @@ class FrontController(RedditController, OAuth2ResourceController):
         end = int(time_module.mktime((article._date + rel_range).utctimetuple()))
 
         omit_nsfw = (article.over_18 or article._nsfw.findall(article.title)) == False
-        query_params = SearchParamsBuilder.related(start, end, 
+        q = SearchParamsBuilder.related_query(start, end, 
                                                    article.title, 
                                                    omit_nsfw=omit_nsfw)
-
-        q = SearchQuery.from_query_params(query_params)
 
         pane = self._search(q, num=num, after=after, reverse=reverse,
                             count=count)[2]
@@ -779,7 +777,7 @@ class FrontController(RedditController, OAuth2ResourceController):
     @api_doc(api_section.subreddits, uri='/subreddits/search', extensions=['json', 'xml'])
     def GET_search_reddits(self, query, reverse, after, count, num):
         """Search reddits by title and description."""
-        q = SubredditSearchQuery(query)
+        q = SearchParamsBuilder.subreddit_query(query)
 
         results, etime, spane = self._search(q, num=num, reverse=reverse,
                                              after=after, count=count,
@@ -802,7 +800,7 @@ class FrontController(RedditController, OAuth2ResourceController):
               sort=VMenu('sort', SearchSortMenu, remember=False),
               recent=VMenu('t', TimeMenu, remember=False),
               restrict_sr=VBoolean('restrict_sr', default=False),
-              syntax=VOneOf('syntax', options=SearchQuery.known_syntaxes))
+              syntax=VOneOf('syntax', options=("lucene", "plain")))
     @api_doc(api_section.search, extensions=['json', 'xml'])
     def GET_search(self, query, num, reverse, after, count, sort, recent,
                    restrict_sr, syntax):
@@ -817,14 +815,22 @@ class FrontController(RedditController, OAuth2ResourceController):
         else:
             site = c.site
 
-        if not syntax:
-            syntax = SearchQuery.default_syntax
+        if syntax == None:
+            syntax = "lucene"
+
+        q = None
+        if syntax == "lucene":
+            q = SearchParamsBuilder.lucene_query(query, site, sort, recent)
+        elif syntax == "plain":
+            q = SearchParamsBuilder.plain_query(query, site, sort, recent)
+        else:
+            raise ValueError("Invalid syntax '%s'" %
+                             syntax)
+            
 
         try:
             cleanup_message = None
             try:
-                q = SearchQuery(query, site, sort,
-                                recent=recent, syntax=syntax)
                 results, etime, spane = self._search(q, num=num, after=after,
                                                      reverse=reverse,
                                                      count=count)
@@ -836,7 +842,14 @@ class FrontController(RedditController, OAuth2ResourceController):
                 cleaned = re.sub("[^\w\s]+", " ", query)
                 cleaned = cleaned.lower().strip()
 
-                q = SearchQuery(cleaned, site, sort, recent=recent)
+                if syntax == "lucene":
+                    q = SearchParamsBuilder.lucene_query(query, site, sort, recent)
+                elif syntax == "plain":
+                    q = SearchParamsBuilder.plain_query(query, site, sort, recent)
+                else:
+                    raise ValueError("Invalid syntax '%s'" %
+                             syntax)
+
                 results, etime, spane = self._search(q, num=num,
                                                      after=after,
                                                      reverse=reverse,

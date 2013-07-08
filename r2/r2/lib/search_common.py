@@ -254,6 +254,9 @@ class SearchParamsBuilderInterface(object):
     def build(self):
         ''' Returns an arbitrary object, specific to the implementation '''
         raise NotImplementedError
+
+    def set_lucene_query(self, query_string):
+        raise NotImplementedError
         
     def add_range(self, name, range_start, range_end):
         raise NotImplementedError
@@ -305,8 +308,21 @@ class SearchParamsBuilderInterface(object):
         return builder
 
     @classmethod
-    def related(cls, ts_start, ts_end, title, omit_nsfw=True):
-        return cls.related_builder(ts_start, ts_end, title, omit_nsfw).build()
+    def related_query(cls, ts_start, ts_end, title, omit_nsfw=True):
+        raise NotImplementedError
+
+    @classmethod
+    def lucene_query(cls, query_string, site, sort, recent):
+        raise NotImplementedError
+
+    @classmethod
+    def plain_query(cls, query_string, site, sort, recent):
+        raise NotImplementedError
+
+    @classmethod
+    def subreddit_query(cls, query_string):
+        raise NotImplementedError
+
 
 class Results(object):
     def __init__(self, docs, hits, facets):

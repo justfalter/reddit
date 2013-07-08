@@ -684,7 +684,8 @@ class CloudSearchQuery(object):
         return results
 
 class CloudSearchQueryParams(object):
-    def __init__(self, query_string, raw_sort=None):
+    def __init__(self, query_string, syntax="cloudsearch", raw_sort=None):
+        self.syntax = syntax
         self.query_string = query_string
         self.raw_sort = raw_sort
         
@@ -695,14 +696,28 @@ class CloudSearchParamsBuilder(SearchParamsBuilderInterface):
     def __init__(self):
         self.query_list = []
         self.sort = None
+        self.lucene_query_string = None
+
+    def set_lucene_query(self, query_string):
+        self.lucene_query_string = query_string
 
     def build(self):
-        query = u"(and %s)" % (' '.join(self.query_list))
-        query = filters._force_unicode(query)
+        syntax = None
+        if self.lucene_query_string:
+            syntax = "lucene"
+            query = self.lucene_query_string
+        else:
+            syntax = "cloudsearch"
+            query = u"(and %s)" % (' '.join(self.query_list))
+            query = filters._force_unicode(query)
+
         raw_sort = None
         if self.sort:
             raw_sort = filters._force_unicode(self.sort)
-        return(CloudSearchQueryParams(query, raw_sort=raw_sort))
+
+        return(CloudSearchQueryParams(query, 
+               syntax=syntax, 
+               raw_sort=raw_sort))
         
 
     def add_range(self, name, range_start, range_end):
@@ -759,57 +774,32 @@ class CloudSearchParamsBuilder(SearchParamsBuilderInterface):
     def set_sort_reddit_activity(self, ascending = True):
         self.set_sort("activity", ascending)
 
+    @classmethod
+    def related_query(cls, ts_start, ts_end, title, omit_nsfw=True):
+        builder = cls.related_builder(ts_start, ts_end, title, omit_nsfw)
+        query_params = builder.build()
+        return LinkSearchQuery(
+            query_params.query_string, 
+            raw_sort=query_params.raw_sort, 
+            syntax=query_params.syntax)
 
-class AdaptedCloudSearchQuery(CloudSearchQuery):
+    @classmethod
+    def lucene_query(cls, query_string, site, sort, recent):
+        return LinkSearchQuery(
+            query_string, 
+            site, sort, recent=recent,
+            syntax='lucene')
 
-    any_replace_regex = re.compile(r'[?\\&|!{}+~^()"\':*-]+')
-    any_replace_with = ' '
+    @classmethod
+    def plain_query(cls, query_string, site, sort, recent):
+        return LinkSearchQuery(
+            query_string, 
+            site, sort, recent=recent,
+            syntax='plain')
 
-    def __init__(self, query_obj):
-        query_list = []
-        sort_list = []
-        for field in query_obj.fields:
-            if field.query_type == "equal":
-                v = field.value
-                if field.any_word == True:
-                    v = self.any_replace_regex.sub(self.any_replace_with, 
-                                                   field.value)
-                    v = u'|'.join(v.split())
-
-                v = v.replace("'", "\\'")
-                query_list.append("{0}:'{1}'".format(field.name, v))
-            elif field.query_type == "boolean":
-                v = 0
-                if field.value == True:
-                    v = 1
-
-                query_list.append(("{0}:{1}".format(field.name, v)))
-            elif field.query_type == "range":
-                query_list.append(("{0}:{1}..{2}".format(field.name, 
-                                                 field.range_start_s(), 
-                                                 field.range_end_s())))
-
-        for s in query_obj.sorts:
-          maybe_minus = ''
-          if s.ascending == False:
-              maybe_minus = '-'
-
-          if s.sort_type == 'generic':
-              sort_list.append("{0}{1}".format(maybe_minus, s.name))
-          elif s.sort_type == 'text_relevance':
-              sort_list.append("{0}text_relevance".format(maybe_minus))
-
-        query = u"(and %s)" % (' '.join(query_list))
-        query = filters._force_unicode(query)
-        raw_sort = None
-        if len(sort_list) > 0:
-            raw_sort = filters._force_unicode(u' '.join(sort_list))
-
-        super(AdaptedCloudSearchQuery, self).__init__(query, 
-                                                      raw_sort=raw_sort,
-                                                      syntax="cloudsearch") 
-
-
+    @classmethod
+    def subreddit_query(cls, query_string):
+        return SubredditSearchQuery(query_string)
 
 class LinkSearchQuery(CloudSearchQuery):
     search_api = g.CLOUDSEARCH_SEARCH_API
@@ -852,12 +842,6 @@ class LinkSearchQuery(CloudSearchQuery):
             queries.append(recent_query)
         return self.create_boolean_query(queries)
 
-    @classmethod
-    def from_query_params(cls, query_params):
-        return cls(query_params.query_string, 
-            raw_sort=query_params.raw_sort, 
-            syntax="cloudsearch")
-        
     @classmethod
     def create_boolean_query(cls, queries):
         '''Return an AND clause combining all queries'''
