@@ -694,14 +694,14 @@ class CloudSearchParamsBuilder(SearchParamsBuilderInterface):
 
     def __init__(self):
         self.query_list = []
-        self.sort_list = []
+        self.sort = None
 
     def build(self):
         query = u"(and %s)" % (' '.join(self.query_list))
         query = filters._force_unicode(query)
         raw_sort = None
-        if len(self.sort_list) > 0:
-            raw_sort = filters._force_unicode(u' '.join(self.sort_list))
+        if self.sort:
+            raw_sort = filters._force_unicode(self.sort)
         return(CloudSearchQueryParams(query, raw_sort=raw_sort))
         
 
@@ -735,14 +735,29 @@ class CloudSearchParamsBuilder(SearchParamsBuilderInterface):
 
         self.query_list.append(("{0}:{1}".format(name, v)))
 
-    def add_sort(self, name, ascending=True):
+    def set_sort(self, name, ascending=True):
         maybe_minus = ''
         if ascending == False:
             maybe_minus = '-'
-        self.sort_list.append("{0}{1}".format(maybe_minus, name))
+        self.sort = "{0}{1}".format(maybe_minus, name)
 
-    def add_relevance_sort(self, ascending = True):
-        self.add_sort("text_relevance", ascending)
+    def set_sort_default(self, ascending = True):
+        self.set_sort("text_relevance", ascending)
+
+    def set_sort_reddit_hot(self, ascending = True):
+        self.set_sort("hot2", ascending)
+
+    def set_sort_reddit_new(self, ascending = True):
+        self.set_sort("new", ascending)
+
+    def set_sort_reddit_top(self, ascending = True):
+        self.set_sort("top", ascending)
+
+    def set_sort_reddit_relevance(self, ascending = True):
+        self.set_sort("relevance", ascending)
+
+    def set_sort_reddit_activity(self, ascending = True):
+        self.set_sort("activity", ascending)
 
 
 class AdaptedCloudSearchQuery(CloudSearchQuery):

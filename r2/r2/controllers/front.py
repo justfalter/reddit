@@ -745,11 +745,6 @@ class FrontController(RedditController, OAuth2ResourceController):
                                                    omit_nsfw=omit_nsfw)
 
         q = SearchQuery.from_query_params(query_params)
-#        super(AdaptedCloudSearchQuery, self).__init__(query, 
-#                                                      raw_sort=raw_sort,
-#                                                      syntax="cloudsearch") 
-#
-#        q = AdaptedSearchQuery(query_params)
 
         pane = self._search(q, num=num, after=after, reverse=reverse,
                             count=count)[2]

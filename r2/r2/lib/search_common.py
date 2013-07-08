@@ -267,10 +267,22 @@ class SearchParamsBuilderInterface(object):
     def add_boolean(self, name, val):
         raise NotImplementedError
 
-    def add_sort(self, name, ascending=True):
+    def set_sort_default(self, ascending = True):
         raise NotImplementedError
 
-    def add_relevance_sort(self, ascending = True):
+    def set_sort_reddit_hot(self, ascending = True):
+        raise NotImplementedError
+
+    def set_sort_reddit_new(self, ascending = True):
+        raise NotImplementedError
+
+    def set_sort_reddit_top(self, ascending = True):
+        raise NotImplementedError
+
+    def set_sort_reddit_relevance(self, ascending = True):
+        raise NotImplementedError
+
+    def set_sort_reddit_activity(self, ascending = True):
         raise NotImplementedError
 
     @classmethod
@@ -289,7 +301,7 @@ class SearchParamsBuilderInterface(object):
         if omit_nsfw == True:
             builder.add_boolean(u"nsfw", False)
 
-        builder.add_relevance_sort(False)
+        builder.set_sort_default(False)
         return builder
 
     @classmethod
